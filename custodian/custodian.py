@@ -326,8 +326,13 @@ class Custodian(object):
             except CustodianError as ex:
                 logger.error(ex.message)
                 if ex.raises:
-                    raise RuntimeError("{} errors reached: {}. Exited..."
-                                       .format(self.total_errors, ex))
+                    msg = "{} errors reached: {}. Exited...".format(self.total_errors, ex)
+                    max_errors_reached = "MaxErrors" == msg
+                    max_errors_per_job_reached = "MaxErrorsPerJob" == msg
+                    raise CustodianRuntimeError(msg, validator=ex.validator, total_errors=self.total_errors,
+                                                errors_current_job=self.errors_current_job,
+                                                max_errors_reached=max_errors_reached,
+                                                max_errors_per_job_reached=max_errors_per_job_reached)
             finally:
                 # Log the corrections to a json file.
                 logger.info("Logging to {}...".format(Custodian.LOG_FILE))
@@ -544,9 +549,14 @@ class Custodian(object):
         except CustodianError as ex:
             logger.error(ex.message)
             if ex.raises:
-                raise RuntimeError(
-                    "{} errors / {} errors per job reached: {}. Exited..."
-                    .format(self.total_errors, self.errors_current_job, ex))
+                msg = "{} errors / {} errors per job reached: {}. Exited..."\
+                    .format(self.total_errors, self.errors_current_job, ex)
+                max_errors_reached = "MaxErrors" == msg
+                max_errors_per_job_reached = "MaxErrorsPerJob" == msg
+                raise CustodianRuntimeError(msg, validator=ex.validator, total_errors=self.total_errors,
+                                            errors_current_job=self.errors_current_job,
+                                            max_errors_reached=max_errors_reached,
+                                            max_errors_per_job_reached=max_errors_per_job_reached)
 
         finally:
             # Log the corrections to a json file.
@@ -735,3 +745,33 @@ class CustodianError(Exception):
         self.raises = raises
         self.validator = validator
         self.message = message
+
+
+class CustodianRuntimeError(RuntimeError):
+    """
+    Exception class for Custodian runtime errors.
+    """
+
+    def __init__(self, message, validator=None, total_errors=None, errors_current_job=None,
+                 max_errors_reached=False, max_errors_per_job_reached=False):
+        """
+        Initializes the error with a message.
+
+        Args:
+            message (str): Message passed to Exception.
+            raises (bool): Whether this should raise a runtime error when caught.
+            validator (Validator/ErrorHandler): Validator or ErrorHandler that
+                caused the exception.
+            total_errors (int): number of total errors.
+            errors_current_job (int): number of errors of the current job.
+            max_errors_reached (bool): True if the error was caused by the max_errors.
+            max_errors_per_job_reached (bool): True if the error was caused by the
+                max_errors_per_job.
+        """
+        super(CustodianRuntimeError, self).__init__(self, message)
+        self.validator = validator
+        self.message = message
+        self.total_errors = total_errors
+        self.errors_current_job = errors_current_job
+        self.max_errors_reached = max_errors_reached
+        self.max_errors_per_job_reached = max_errors_per_job_reached
